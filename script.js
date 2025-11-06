@@ -44,7 +44,7 @@ function fetchPostComments(postId) {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
             if (Math.random() < 0.1) {
-                reject(new Error('Failed to fetch comments for post '));
+                reject(new Error('Failed to fetch comments for post ' + postId));
                 return;
             }
             const comments = [
@@ -69,8 +69,10 @@ function fetchPostComments(postId) {
             ];
             resolve(comments);
         }, 2000);
+        console.log(`Post ${post.postId} comments:`, comments);
     });
 }
+
 
 async function fetchDataSequentiallyWithErrorHandling(userId) {
     console.log('Starting sequential data fetch...');
@@ -90,12 +92,13 @@ async function fetchDataSequentiallyWithErrorHandling(userId) {
             try {
             const comments = await fetchPostComments(post.postId);
             post.comments = comments;
-            console.log(`Comments retreived for post X`);
-        } catch (commentError) {
-            console.error(`Error fetching comments for post ${post.postId}:`, commentError.message);
+            console.log(`Comments retreived for post ${post.postId}:`, comments);
+        } catch (err) {
+            console.warn(`Error fetching comments for post ${post.postId}:`, err.message);
             post.comments = [];
         }
     }
+    console.log('final posts with comments:', posts);
         const endTime = Date.now();
         console.log(`Sequential fetch took ${endTime - startTime} ms`);
         return { user, posts };
@@ -116,30 +119,34 @@ async function fetchDataInParallelWithErrorHandling(userId) {
     let user = null;
     let posts = [];
     try {
-        [user, posts] = await Promise.all([
-            fetchUserProfile(userId),
-            fetchUserPosts(userId)
-        ]);
+        user = await fetchUserProfile(userId);
+        posts = await fetchUserPosts(userId);
+        
         console.log('User and posts retreived simultaneously');
 
-        const commentPromises = posts.map(post => 
-            fetchPostComments(post.postId).catch(err => {
-                console.warn(`Error fetching comments for post ${post.postId}:`, err.message);
-                return [];
-            })
-        );
+  const commentPromises = posts.map(p => {
+  const postId = p.postId;
+  return fetchPostComments(postId).catch(err => {
+    console.warn(`Error fetching comments for post ${postId}:`, err.message);
+    return [];
+  });
+});
 
-        const allComments = await Promise.all(commentPromises);
-        posts.forEach((post, index) => {
-            post.comments = allComments[index];
-            console.log(`Comments retreived for post ${post.postId}`);
-        });
-        const endTime = Date.now();
+
+
+
+  const allComments = await Promise.all(commentPromises);
+posts.forEach((p, i) => {
+  p.comments = allComments[i];
+});
+const endTime = Date.now();
         console.log(`Parallel fetch took ${endTime - startTime} ms`);
+console.log('final posts with comments:', posts);
         return {
             user,
             posts
         };
+        
     } catch (error) {
         console.error('Error in parallel fetch:', error.message);
         return {
@@ -214,8 +221,8 @@ function formatOutput(data) {
             <strong>${post.title}</strong><br>
             <em>${post.content}</em><br>
             <u>Comments:</u>
-            <ul>
-                ${post.comments.map(c => `<li><strong>${c.username}:</strong> ${c.comment}</li>`).join('')}
+        <ul>
+                ${(post.comments || []).map(c => `<li><strong>${c.username}:</strong> ${c.comment}</li>`).join('')}
             </ul>
         </div>`;
     });
